@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: geth
+  labels:
+    name: geth
+spec:
+  ports:
+  - port: 8545
+  selector:
+    app: etherquery
