@@ -1,7 +1,6 @@
 package etherquery
 
 import (
-    "bytes"
     "log"
     "math/rand"
     "time"
@@ -31,7 +30,7 @@ func retryRequest(initialDelay, retries int, request func() (interface{}, error)
 
         switch err := err.(type) {
         case *googleapi.Error:
-            if err.Code / 500 == 5 {
+            if err.Code / 500 == 5 || err.Code == 403 {
                 delay := delayer(true)
                 log.Printf("Got status %v, backing off for %v before retrying.", err.Code, delay)
                 time.Sleep(delay)
@@ -51,57 +50,30 @@ func retryRequest(initialDelay, retries int, request func() (interface{}, error)
 
 }
 
-func uploadData(service *bigquery.Service, project string, dataset string, table string, recordCount int, data []byte) {
+func uploadData(service *bigquery.Service, project string, dataset string, table string, rows []*bigquery.TableDataInsertAllRequestRows) {
     start := time.Now()
 
-    job := &bigquery.Job{
-        Configuration: &bigquery.JobConfiguration{
-            Load: &bigquery.JobConfigurationLoad{
-                DestinationTable: &bigquery.TableReference{
-                    ProjectId: project,
-                    DatasetId: dataset,
-                    TableId:   table,
-                },
-                SourceFormat: "NEWLINE_DELIMITED_JSON",
-                WriteDisposition: "WRITE_APPEND",
-            },
-        },
+    request := &bigquery.TableDataInsertAllRequest{
+        Rows: rows,
     }
 
-    // Try starting the job until it succeeds or we give up
-    j, err := retryRequest(1, 3, func() (interface{}, error) {
-        call := service.Jobs.Insert(project, job).
-            Media(bytes.NewReader(data), googleapi.ContentType("text/json"))
+    // Try inserting the data until it succeeds or we give up
+    r, err := retryRequest(1, 3, func() (interface{}, error) {
+        call := service.Tabledata.InsertAll(project, dataset, table, request)
         return call.Do()
     })
     if err != nil {
         log.Printf("Got error %v while submitting job; giving up.", err)
         return
     }
-    job = j.(*bigquery.Job)
+    response := r.(*bigquery.TableDataInsertAllResponse)
 
-    // Poll the job until it's done
-    for {
-        j, err := retryRequest(1, 3, func() (interface{}, error) {
-            return service.Jobs.Get(project, job.JobReference.JobId).Do()
-        })
-        if err != nil {
-            log.Printf("Got error %v while polling for job status; giving up.", err)
-            return
-        }
-        job = j.(*bigquery.Job)
-        if job.Status.State == "DONE" {
-            break
-        }
-        time.Sleep(time.Second * 5)
-    }
-
-    if res := job.Status.ErrorResult; res != nil {
-        log.Printf("Job failed with error: %v", res)
-        for i := 0; i < len(job.Status.Errors); i++ {
-            log.Printf("  %v", job.Status.Errors[i])
+    if res := response.InsertErrors; len(res) > 0 {
+        log.Printf("Got %v insert errors:", len(res))
+        for i := 0; i < len(res); i++ {
+            log.Printf("  %v", res[i])
         }
         return
     }
-    log.Printf("Successfully inserted %v records after %v", recordCount, time.Since(start))
+    log.Printf("Successfully inserted %v records after %v", len(rows), time.Since(start))
 }

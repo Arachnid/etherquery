@@ -1,84 +1,60 @@
 package etherquery
 
 import (
-    "github.com/ethereum/go-ethereum/common"
     "github.com/ethereum/go-ethereum/core"
     "github.com/ethereum/go-ethereum/rpc"
     "github.com/ethereum/go-ethereum/core/types"
+    "google.golang.org/api/bigquery/v2"
 )
 
-type TransactionInfo struct {
-    From            common.Address  `json:"from"`
-    Gas             uint64          `json:"gas"`
-    GasPrice        uint64          `json:"gasPrice"`
-    Hash            common.Hash     `json:"hash"`
-    Input           []byte          `json:"input"`
-    Nonce           uint64          `json:"nonce"`
-    To              *common.Address `json:"to"`
-    Value           *rpc.HexNumber  `json:"value"`
-}
-
-type BlockInfo struct {
-    Number          uint64          `json:"number"`
-    Hash            common.Hash     `json:"hash"`
-    ParentHash      common.Hash     `json:"parentHash"`
-    Nonce           *rpc.HexNumber  `json:"nonce"`
-    Miner           common.Address  `json:"miner"`
-    Difficulty      *rpc.HexNumber  `json:"difficulty"`
-    TotalDifficulty *rpc.HexNumber  `json:"totalDifficulty"`
-    ExtraData       []byte          `json:"extraData"`
-    Size            int64           `json:"size"`
-    GasLimit        uint64          `json:"gasLimit"`
-    GasUsed         uint64          `json:"gasUsed"`
-    Timestamp       uint64          `json:"timestamp"`
-    Transactions    []*TransactionInfo `json:"transactions"`
-}
-
-func getTransactionInfo(tx *types.Transaction) *TransactionInfo {
+func transactionToJsonValue(tx *types.Transaction) map[string]bigquery.JsonValue {
     from, _ := tx.FromFrontier()
 
-    return &TransactionInfo {
-        From:           from,
-        Gas:            tx.Gas().Uint64(),
-        GasPrice:       tx.GasPrice().Uint64(),
-        Hash:           tx.Hash(),
-        Input:          tx.Data(),
-        Nonce:          tx.Nonce(),
-        To:             tx.To(),
-        Value:          rpc.NewHexNumber(tx.Value()),
+    return map[string]bigquery.JsonValue{
+        "from": from,
+        "gas": tx.Gas().Uint64(),
+        "gasPrice": tx.GasPrice().Uint64(),
+        "hash": tx.Hash(),
+        "input": tx.Data(),
+        "nonce": tx.Nonce(),
+        "to": tx.To(),
+        "value": rpc.NewHexNumber(tx.Value()),
     }
 }
 
-func getTransactionInfos(txs []*types.Transaction) []*TransactionInfo {
-    txinfos := make([]*TransactionInfo, len(txs))
+func transactionsToJsonValue(txs []*types.Transaction) []map[string]bigquery.JsonValue {
+    txinfos := make([]map[string]bigquery.JsonValue, len(txs))
     for i := 0; i < len(txinfos); i++ {
-        txinfos[i] = getTransactionInfo(txs[i])
+        txinfos[i] = transactionToJsonValue(txs[i])
     }
     return txinfos
 }
 
-func getBlockInfo(bc *core.BlockChain, b *types.Block) *BlockInfo {
-    return &BlockInfo{
-        Number:         b.Number().Uint64(),
-        Hash:           b.Hash(),
-        ParentHash:     b.ParentHash(),
-        Nonce:          rpc.NewHexNumber(b.Header().Nonce.Uint64()),
-        Miner:          b.Coinbase(),
-        Difficulty:     rpc.NewHexNumber(b.Difficulty()),
-        TotalDifficulty:rpc.NewHexNumber(bc.GetTd(b.Hash())),
-        ExtraData:      b.Extra(),
-        Size:           b.Size().Int64(),
-        GasLimit:       b.GasLimit().Uint64(),
-        GasUsed:        b.GasLimit().Uint64(),
-        Timestamp:      b.Time().Uint64(),
-        Transactions:   getTransactionInfos(b.Transactions()),
+func blockToJsonValue(bc *core.BlockChain, b *types.Block) *bigquery.TableDataInsertAllRequestRows {
+    return &bigquery.TableDataInsertAllRequestRows{
+        InsertId: b.Hash().Hex(),
+        Json: map[string]bigquery.JsonValue{
+            "number": b.Number().Uint64(),
+            "hash": b.Hash(),
+            "parentHash": b.ParentHash(),
+            "nonce": rpc.NewHexNumber(b.Header().Nonce.Uint64()),
+            "miner": b.Coinbase(),
+            "difficulty": rpc.NewHexNumber(b.Difficulty()),
+            "totalDifficulty": rpc.NewHexNumber(bc.GetTd(b.Hash())),
+            "extraData": b.Extra(),
+            "size": b.Size().Int64(),
+            "gasLimit": b.GasLimit().Uint64(),
+            "gasUsed": b.GasLimit().Uint64(),
+            "timestamp": b.Time().Uint64(),
+            "transactions": transactionsToJsonValue(b.Transactions()),
+        },
     }
 }
 
-func getBlockInfos(bc *core.BlockChain, blocks []*types.Block) []*BlockInfo {
-    blkinfos := make([]*BlockInfo, len(blocks))
-    for i := 0; i < len(blkinfos); i++ {
-        blkinfos[i] = getBlockInfo(bc, blocks[i]);
+func blocksToJsonValue(bc *core.BlockChain, blocks []*types.Block) []*bigquery.TableDataInsertAllRequestRows {
+    values := make([]*bigquery.TableDataInsertAllRequestRows, len(blocks))
+    for i := 0; i < len(blocks); i++ {
+        values[i] = blockToJsonValue(bc, blocks[i])
     }
-    return blkinfos
+    return values
 }

@@ -13,11 +13,11 @@ spec:
     spec:
       containers:
       - name: etherquery
-        image: ethereum/client-go
+        image: gcr.io/etherquery/etherquery:v1
         ports:
         - containerPort: 8545
           name: json-rpc
-        args: ["--rpc", "--rpcaddr", "0.0.0.0", "--datadir", "/mnt/blockchain"]
+        command: ["/go/bin/etherquery", "--rpc", "--rpcaddr", "0.0.0.0", "--datadir", "/mnt/blockchain"]
         volumeMounts:
         - name: ethereum-blockchain
           mountPath: "/mnt/blockchain"

@@ -1,8 +1,6 @@
 package etherquery
 
 import (
-    "bytes"
-    "encoding/json"
     "log"
     "time"
 
@@ -87,29 +85,11 @@ func batchBlocks(ch <-chan *types.Block, d time.Duration, items int) (<- chan []
     return batches
 }
 
-func (eq *EtherQuery) serializeBatch(batch []*types.Block) ([]byte, error) {
-    info := getBlockInfos(eq.ethereum.BlockChain(), batch)
-
-    var buf bytes.Buffer
-    encoder := json.NewEncoder(&buf) 
-    for i := 0; i < len(info); i++ {
-        if err := encoder.Encode(info[i]); err != nil {
-            return nil, err
-        }
-    }
-
-    return buf.Bytes(), nil
-}
-
 func (eq *EtherQuery) consumeBlocks(ch <-chan []*types.Block) {
     for batch := range ch {
         log.Printf("Received batch of %v records starting with %v.", len(batch), batch[0].Number().Uint64())
-        data, err := eq.serializeBatch(batch)
-        if err != nil {
-            log.Printf("Error loading batch starting with %v: %v", batch[0].Number().Uint64(), err)
-            continue
-        }
-        go uploadData(eq.bqService, eq.config.Project, eq.config.Dataset, eq.config.Table, len(batch), data)
+        rows := blocksToJsonValue(eq.ethereum.BlockChain(), batch)
+        go uploadData(eq.bqService, eq.config.Project, eq.config.Dataset, eq.config.Table, rows)
     }
 }
 
