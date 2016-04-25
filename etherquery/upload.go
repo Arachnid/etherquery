@@ -75,5 +75,65 @@ func uploadData(service *bigquery.Service, project string, dataset string, table
         }
         return
     }
-    log.Printf("Successfully inserted %v records after %v", len(rows), time.Since(start))
+    log.Printf("Successfully streamed %v records to table '%v' after %v", len(rows), table, time.Since(start))
+}
+
+type batchedBigqueryWriter struct {
+    service         *bigquery.Service
+    project         string
+    dataset         string
+    table           string
+    batchInterval   time.Duration
+    batchSize       int
+    ch              chan<- *bigquery.TableDataInsertAllRequestRows
+    more            bool
+}
+
+func newBatchedBigqueryWriter(service *bigquery.Service, project, dataset, table string, interval time.Duration, size int) *batchedBigqueryWriter {
+    return &batchedBigqueryWriter{
+        service:        service,
+        project:        project,
+        dataset:        dataset,
+        table:          table,
+        batchInterval:  interval,
+        batchSize:      size,
+    }
+}
+
+func (self *batchedBigqueryWriter) start() {
+    ch := make(chan *bigquery.TableDataInsertAllRequestRows)
+    self.ch = ch
+
+    go func() {
+        self.more = true
+        for self.more {
+            batch := make([]*bigquery.TableDataInsertAllRequestRows, 1, self.batchSize)
+            if batch[0], self.more = <-ch; !self.more {
+                return
+            }
+            
+            timeout := time.After(self.batchInterval)
+            batching: for {
+                var row *bigquery.TableDataInsertAllRequestRows;
+                select {
+                case row, self.more = <-ch:
+                    batch = append(batch, row)
+                    if len(batch) >= self.batchSize {
+                        break batching
+                    }
+                case <-timeout:
+                    break batching
+                }
+            }
+            go uploadData(self.service, self.project, self.dataset, self.table, batch)
+        }
+    }()
+}
+
+func (self *batchedBigqueryWriter) add(record *bigquery.TableDataInsertAllRequestRows) {
+    self.ch <- record
+}
+
+func (self *batchedBigqueryWriter) stop() {
+    self.more = false
 }

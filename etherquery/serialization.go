@@ -1,60 +1,75 @@
 package etherquery
 
 import (
-    "github.com/ethereum/go-ethereum/core"
+    "github.com/ethereum/go-ethereum/common"
     "github.com/ethereum/go-ethereum/rpc"
     "github.com/ethereum/go-ethereum/core/types"
+    "github.com/ethereum/go-ethereum/core/vm"
     "google.golang.org/api/bigquery/v2"
 )
 
-func transactionToJsonValue(tx *types.Transaction) map[string]bigquery.JsonValue {
+func logToJsonValue(log *vm.Log) map[string]bigquery.JsonValue {
+    return map[string]bigquery.JsonValue {
+        "address": log.Address,
+        "topics": log.Topics,
+        "data": log.Data,
+    }
+}
+
+func logsToJsonValue(logs []*vm.Log) []map[string]bigquery.JsonValue {
+    loginfos := make([]map[string]bigquery.JsonValue, len(logs))
+    for i := 0; i < len(logs); i++ {
+        loginfos[i] = logToJsonValue(logs[i])
+    }
+    return loginfos
+}
+
+func transactionToJsonValue(block *types.Block, tx *types.Transaction, receipt *types.Receipt) *bigquery.TableDataInsertAllRequestRows {
     from, _ := tx.FromFrontier()
 
-    return map[string]bigquery.JsonValue{
-        "from": from,
-        "gas": tx.Gas().Uint64(),
-        "gasPrice": tx.GasPrice().Uint64(),
-        "hash": tx.Hash(),
-        "input": tx.Data(),
-        "nonce": tx.Nonce(),
-        "to": tx.To(),
-        "value": rpc.NewHexNumber(tx.Value()),
+    var contractAddress *common.Address = nil
+    if receipt.ContractAddress != (common.Address{}) {
+        contractAddress = &receipt.ContractAddress
     }
-}
 
-func transactionsToJsonValue(txs []*types.Transaction) []map[string]bigquery.JsonValue {
-    txinfos := make([]map[string]bigquery.JsonValue, len(txs))
-    for i := 0; i < len(txinfos); i++ {
-        txinfos[i] = transactionToJsonValue(txs[i])
-    }
-    return txinfos
-}
-
-func blockToJsonValue(bc *core.BlockChain, b *types.Block) *bigquery.TableDataInsertAllRequestRows {
     return &bigquery.TableDataInsertAllRequestRows{
-        InsertId: b.Hash().Hex(),
+        InsertId: tx.Hash().Hex(),
         Json: map[string]bigquery.JsonValue{
-            "number": b.Number().Uint64(),
-            "hash": b.Hash(),
-            "parentHash": b.ParentHash(),
-            "nonce": rpc.NewHexNumber(b.Header().Nonce.Uint64()),
-            "miner": b.Coinbase(),
-            "difficulty": rpc.NewHexNumber(b.Difficulty()),
-            "totalDifficulty": rpc.NewHexNumber(bc.GetTd(b.Hash())),
-            "extraData": b.Extra(),
-            "size": b.Size().Int64(),
-            "gasLimit": b.GasLimit().Uint64(),
-            "gasUsed": b.GasLimit().Uint64(),
-            "timestamp": b.Time().Uint64(),
-            "transactions": transactionsToJsonValue(b.Transactions()),
+            "blockNumber": block.Number().Uint64(),
+            "blockHash": block.Hash(),
+            "timestamp": block.Time().Uint64(),
+            "hash": tx.Hash(),
+            "from": from,
+            "to": tx.To(),
+            "gas": tx.Gas().Uint64(),
+            "gasUsed": receipt.GasUsed,
+            "gasPrice": tx.GasPrice().Uint64(),
+            "input": tx.Data(),
+            "logs": logsToJsonValue(receipt.Logs),
+            "nonce": tx.Nonce(),
+            "value": rpc.NewHexNumber(tx.Value()),
+            "contractAddress": contractAddress,
         },
     }
 }
 
-func blocksToJsonValue(bc *core.BlockChain, blocks []*types.Block) []*bigquery.TableDataInsertAllRequestRows {
-    values := make([]*bigquery.TableDataInsertAllRequestRows, len(blocks))
-    for i := 0; i < len(blocks); i++ {
-        values[i] = blockToJsonValue(bc, blocks[i])
+func blockToJsonValue(d *blockData) *bigquery.TableDataInsertAllRequestRows {
+    return &bigquery.TableDataInsertAllRequestRows{
+        InsertId: d.block.Hash().Hex(),
+        Json: map[string]bigquery.JsonValue{
+            "number": d.block.Number().Uint64(),
+            "hash": d.block.Hash(),
+            "parentHash": d.block.ParentHash(),
+            "nonce": rpc.NewHexNumber(d.block.Header().Nonce.Uint64()),
+            "miner": d.block.Coinbase(),
+            "difficulty": rpc.NewHexNumber(d.block.Difficulty()),
+            "totalDifficulty": rpc.NewHexNumber(d.totalDifficulty),
+            "extraData": d.block.Extra(),
+            "size": d.block.Size().Int64(),
+            "gasLimit": d.block.GasLimit().Uint64(),
+            "gasUsed": d.block.GasLimit().Uint64(),
+            "timestamp": d.block.Time().Uint64(),
+            "transactionCount": len(d.block.Transactions()),
+        },
     }
-    return values
 }

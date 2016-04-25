@@ -112,6 +112,20 @@ The output of this command is supposed to be machine-readable.
         utils.GpobaseStepUpFlag,
         utils.GpobaseCorrectionFactorFlag,
         utils.ExtraDataFlag,
+        cli.StringFlag{
+            Name: "gcpproject",
+            Usage: "GCP project ID",
+            Value: "etherquery",
+        },
+        cli.StringFlag{
+            Name: "dataset",
+            Usage: "BigQuery dataset ID",
+            Value: "ethereum",
+        },
+        cli.IntFlag{
+            Name: "blocksrev",
+            Usage: "blocks service revision number",
+        },
     }
     app.Flags = append(app.Flags)
 
@@ -175,9 +189,10 @@ func geth(ctx *cli.Context) {
 
 func startNode(ctx *cli.Context, stack *node.Node) {
     eqConfig := &etherquery.EtherQueryConfig{
-        Project: "etherquery",
-        Dataset: "ethereum",
-        Table: "blocks",
+        Project: ctx.GlobalString("gcpproject"),
+        Dataset: ctx.GlobalString("dataset"),
+        BatchInterval: time.Second * 15,
+        BatchSize: 500,
     }
 
     if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {

@@ -1,0 +1,89 @@
+[
+  {
+    "name": "blockNumber",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "blockHash",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "timestamp",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "hash",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "from",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "to",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "gas",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "gasUsed",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "gasPrice",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "input",
+    "type": "BYTES",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "logs",
+    "type": "RECORD",
+    "mode": "REPEATED",
+    "fields": [
+      {
+        "name": "address",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "topics",
+        "type": "STRING",
+        "mode": "REPEATED"
+      },
+      {
+        "name": "data",
+        "type": "BYTES",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  {
+    "name": "nonce",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "value",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "contractAddress",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  }
+]
