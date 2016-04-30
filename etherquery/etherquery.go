@@ -7,7 +7,9 @@ import (
     "math/big"
     "time"
 
+    "github.com/ethereum/go-ethereum/common"
     "github.com/ethereum/go-ethereum/core"
+    "github.com/ethereum/go-ethereum/core/state"
     "github.com/ethereum/go-ethereum/core/types"
     "github.com/ethereum/go-ethereum/eth"
     "github.com/ethereum/go-ethereum/ethdb"
@@ -20,7 +22,7 @@ import (
     "google.golang.org/api/bigquery/v2"
 )
 
-const DATA_VERSION uint64 = 1
+const DATA_VERSION uint64 = 3
 
 type EtherQueryConfig struct {
     Project         string
@@ -69,56 +71,77 @@ func (eq *EtherQuery) APIs() ([]rpc.API) {
     return []rpc.API{}
 }
 
+// valueTransfer represents a transfer of ether from one account to another
+type valueTransfer struct {
+    depth           int
+    transactionHash common.Hash
+    src             common.Address
+    srcBalance      *big.Int
+    dest            common.Address
+    destBalance     *big.Int
+    value           *big.Int
+    kind            string
+}
+
 type blockData struct {
     block           *types.Block
-    receipts        []*types.Receipt
+    trace           *traceData
     totalDifficulty *big.Int
 }
 
-type exporter func(*batchedBigqueryWriter, *blockData)
-
-func blockExporter(writer *batchedBigqueryWriter, data *blockData) {
-    writer.add(blockToJsonValue(data))
+type exporter interface {
+    setWriter(*batchedBigqueryWriter)
+    exportGenesis(*types.Block, state.World)
+    export(*blockData)
+    getTableName() string
 }
 
-func transactionExporter(writer *batchedBigqueryWriter, data *blockData) {
-    for i, tx := range data.block.Transactions() {
-        writer.add(transactionToJsonValue(data.block, tx, data.receipts[i]))
-    }
-}
-
-type exporterConfig struct {
-    function    exporter
-    tableName   string
-}
-
-var EXPORTERS []exporterConfig = []exporterConfig{
-    exporterConfig{blockExporter, "blocks"},
-    exporterConfig{transactionExporter, "transactions"},
+var EXPORTERS []exporter = []exporter{
+    &blockExporter{},
+    &transactionExporter{},
+    &transferExporter{},
 }
 
 func (eq *EtherQuery) processBlocks(ch <-chan *types.Block) {
-    writers := make([]*batchedBigqueryWriter, len(EXPORTERS))
-    for i, conf := range EXPORTERS {
-        writers[i] = newBatchedBigqueryWriter(eq.bqService, eq.config.Project, eq.config.Dataset, conf.tableName, eq.config.BatchInterval, eq.config.BatchSize)
-        writers[i].start()
+    for _, exporter := range EXPORTERS {
+        writer := newBatchedBigqueryWriter(
+            eq.bqService, eq.config.Project, eq.config.Dataset, exporter.getTableName(),
+            eq.config.BatchInterval, eq.config.BatchSize)
+        exporter.setWriter(writer)
+        writer.start()
     }
 
-    chainDb := eq.ethereum.ChainDb()
-
     for block := range ch {
+        if block.Number().Uint64() == 0 {
+            log.Printf("Processing genesis block...")
+            statedb, err := state.New(eq.ethereum.BlockChain().GetBlock(block.Hash()).Root(), eq.ethereum.ChainDb())
+            if err != nil {
+                log.Fatalf("Failed to get state DB for genesis block: %v", err)
+            }
+            world := statedb.RawDump()
+            for _, exporter := range EXPORTERS {
+                exporter.exportGenesis(block, world)
+            }
+        }
+
         if block.Number().Uint64() % 1000 == 0 {
-            log.Printf("Processing block %v...", block.Number().Uint64());
+            log.Printf("Processing block %v @%v...", block.Number().Uint64(), time.Unix(block.Time().Int64(), 0));
+        }
+
+        trace, err := traceBlock(eq.ethereum, block)
+        if err != nil {
+            log.Printf("Unable to trace transactions in block %v: %v", block.Number().Uint64(), err)
+            continue
         }
 
         blockData := &blockData{
             block: block,
-            receipts: core.GetBlockReceipts(chainDb, block.Hash()),
+            trace: trace,
             totalDifficulty: eq.ethereum.BlockChain().GetTd(block.Hash()),
         }
 
-        for i, conf := range EXPORTERS {
-            conf.function(writers[i], blockData)
+        for _, exporter := range EXPORTERS {
+            exporter.export(blockData)
         }
         eq.putLastBlock(block.Number().Uint64())
     }
@@ -180,6 +203,8 @@ func (eq *EtherQuery) consumeBlocks() {
         blocks <- chain.GetBlockByNumber(lastBlock)
         lastBlock += 1
     }
+
+    log.Printf("Caught up; subscribing to new blocks.")
 
     // Now, subscribe to new blocks as they arrive
     ch := eq.mux.Subscribe(core.ChainHeadEvent{}).Chan()

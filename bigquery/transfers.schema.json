@@ -1,0 +1,62 @@
+[
+  {
+    "name": "blockNumber",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "blockHash",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "timestamp",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "transactionHash",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "transferIndex",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "depth",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "from",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "to",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "fromBalance",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "toBalance",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "value",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "type",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  }
+]

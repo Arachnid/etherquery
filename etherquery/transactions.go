@@ -3,6 +3,7 @@ package etherquery
 import (
     "github.com/ethereum/go-ethereum/common"
     "github.com/ethereum/go-ethereum/rpc"
+    "github.com/ethereum/go-ethereum/core/state"
     "github.com/ethereum/go-ethereum/core/types"
     "github.com/ethereum/go-ethereum/core/vm"
     "google.golang.org/api/bigquery/v2"
@@ -24,12 +25,18 @@ func logsToJsonValue(logs []*vm.Log) []map[string]bigquery.JsonValue {
     return loginfos
 }
 
-func transactionToJsonValue(block *types.Block, tx *types.Transaction, receipt *types.Receipt) *bigquery.TableDataInsertAllRequestRows {
+func transactionToJsonValue(block *types.Block, tx *types.Transaction, trace *transactionTrace) *bigquery.TableDataInsertAllRequestRows {
     from, _ := tx.FromFrontier()
 
     var contractAddress *common.Address = nil
-    if receipt.ContractAddress != (common.Address{}) {
-        contractAddress = &receipt.ContractAddress
+    if trace.receipt.ContractAddress != (common.Address{}) {
+        contractAddress = &trace.receipt.ContractAddress
+    }
+
+    var errorMsg *string
+    if trace.err != nil {
+    	msg := trace.err.Error()
+    	errorMsg = &msg
     }
 
     return &bigquery.TableDataInsertAllRequestRows{
@@ -42,34 +49,28 @@ func transactionToJsonValue(block *types.Block, tx *types.Transaction, receipt *
             "from": from,
             "to": tx.To(),
             "gas": tx.Gas().Uint64(),
-            "gasUsed": receipt.GasUsed,
+            "gasUsed": trace.receipt.GasUsed,
             "gasPrice": tx.GasPrice().Uint64(),
             "input": tx.Data(),
-            "logs": logsToJsonValue(receipt.Logs),
+            "logs": logsToJsonValue(trace.receipt.Logs),
             "nonce": tx.Nonce(),
             "value": rpc.NewHexNumber(tx.Value()),
             "contractAddress": contractAddress,
+            "error": errorMsg,
         },
     }
 }
 
-func blockToJsonValue(d *blockData) *bigquery.TableDataInsertAllRequestRows {
-    return &bigquery.TableDataInsertAllRequestRows{
-        InsertId: d.block.Hash().Hex(),
-        Json: map[string]bigquery.JsonValue{
-            "number": d.block.Number().Uint64(),
-            "hash": d.block.Hash(),
-            "parentHash": d.block.ParentHash(),
-            "nonce": rpc.NewHexNumber(d.block.Header().Nonce.Uint64()),
-            "miner": d.block.Coinbase(),
-            "difficulty": rpc.NewHexNumber(d.block.Difficulty()),
-            "totalDifficulty": rpc.NewHexNumber(d.totalDifficulty),
-            "extraData": d.block.Extra(),
-            "size": d.block.Size().Int64(),
-            "gasLimit": d.block.GasLimit().Uint64(),
-            "gasUsed": d.block.GasLimit().Uint64(),
-            "timestamp": d.block.Time().Uint64(),
-            "transactionCount": len(d.block.Transactions()),
-        },
+type transactionExporter struct {
+	writer *batchedBigqueryWriter
+}
+
+func (self *transactionExporter) setWriter(writer *batchedBigqueryWriter) { self.writer = writer }
+func (self *transactionExporter) getTableName() string { return "transactions" }
+func (self *transactionExporter) exportGenesis(block *types.Block, world state.World) {}
+
+func (self *transactionExporter) export(data *blockData) {
+    for i, tx := range data.block.Transactions() {
+        self.writer.add(transactionToJsonValue(data.block, tx, data.trace.transactions[i]))
     }
 }

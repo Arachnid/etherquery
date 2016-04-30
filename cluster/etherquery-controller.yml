@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: etherquery
-        image: gcr.io/etherquery/etherquery:v1.0.1
+        image: gcr.io/etherquery/etherquery:v1.1.5
         ports:
         - containerPort: 8545
           name: json-rpc

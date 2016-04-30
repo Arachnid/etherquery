@@ -85,5 +85,10 @@
     "name": "contractAddress",
     "type": "STRING",
     "mode": "NULLABLE"
+  },
+  {
+    "name": "error",
+    "type": "STRING",
+    "mode": "NULLABLE"
   }
 ]
