@@ -263,13 +263,13 @@ func traceBlock(ethereum *eth.Ethereum, block *types.Block) (*traceData, error) 
 
     blockchain := ethereum.BlockChain()
 
-    parent := blockchain.GetBlock(block.ParentHash())
+    parent := blockchain.GetBlockByHash(block.ParentHash())
     if parent == nil {
         return nil, fmt.Errorf("Could not retrieve parent block for hash %v",
             block.ParentHash().Hex())
     }
 
-    statedb, err := state.New(blockchain.GetBlock(block.ParentHash()).Root(), ethereum.ChainDb())
+    statedb, err := state.New(blockchain.GetBlockByHash(block.ParentHash()).Root(), ethereum.ChainDb())
     if err != nil {
         return nil, err
     }

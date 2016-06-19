@@ -7,16 +7,18 @@ import (
     "time"
 
     "github.com/arachnid/etherquery/etherquery"
-    "github.com/codegangsta/cli"
     "github.com/ethereum/go-ethereum/cmd/utils"
     "github.com/ethereum/go-ethereum/common"
+    "github.com/ethereum/go-ethereum/console"
     "github.com/ethereum/go-ethereum/eth"
     "github.com/ethereum/go-ethereum/logger"
     "github.com/ethereum/go-ethereum/logger/glog"
     "github.com/ethereum/go-ethereum/metrics"
     "github.com/ethereum/go-ethereum/node"
     "github.com/ethereum/go-ethereum/params"
+    "github.com/ethereum/go-ethereum/release"
     "github.com/ethereum/go-ethereum/rlp"
+    "gopkg.in/urfave/cli.v1"
 )
 
 const (
@@ -25,6 +27,7 @@ const (
     VersionMajor     = 1
     VersionMinor     = 5
     VersionPatch     = 0
+    VersionOracle    = "0xfa7b9770ca4cb04296cac84f37736d4041251cdf"
 )
 
 var (
@@ -94,7 +97,7 @@ The output of this command is supposed to be machine-readable.
         utils.IPCApiFlag,
         utils.IPCPathFlag,
         utils.ExecFlag,
-        utils.PreLoadJSFlag,
+        utils.PreloadJSFlag,
         utils.WhisperEnabledFlag,
         utils.DevModeFlag,
         utils.TestNetFlag,
@@ -146,7 +149,7 @@ The output of this command is supposed to be machine-readable.
 
     app.After = func(ctx *cli.Context) error {
         logger.Flush()
-        utils.Stdin.Close() // Resets terminal mode.
+        console.Stdin.Close() // Resets terminal mode.
         return nil
     }
 }
@@ -182,7 +185,13 @@ func makeDefaultExtra() []byte {
 // It creates a default node based on the command line arguments and runs it in
 // blocking mode, waiting for it to be shut down.
 func geth(ctx *cli.Context) {
-    node := utils.MakeSystemNode(ClientIdentifier, nodeNameVersion, makeDefaultExtra(), ctx)
+    relconf := release.Config{
+        Oracle: common.HexToAddress(VersionOracle),
+        Major: uint32(1),
+        Minor: uint32(5),
+        Patch: uint32(0),
+    }
+    node := utils.MakeSystemNode(ClientIdentifier, nodeNameVersion, relconf, makeDefaultExtra(), ctx)
     startNode(ctx, node)
     node.Wait()
 }

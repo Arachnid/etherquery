@@ -114,7 +114,7 @@ func (eq *EtherQuery) processBlocks(ch <-chan *types.Block) {
     for block := range ch {
         if block.Number().Uint64() == 0 {
             log.Printf("Processing genesis block...")
-            statedb, err := state.New(eq.ethereum.BlockChain().GetBlock(block.Hash()).Root(), eq.ethereum.ChainDb())
+            statedb, err := state.New(eq.ethereum.BlockChain().GetBlockByHash(block.Hash()).Root(), eq.ethereum.ChainDb())
             if err != nil {
                 log.Fatalf("Failed to get state DB for genesis block: %v", err)
             }
@@ -137,7 +137,7 @@ func (eq *EtherQuery) processBlocks(ch <-chan *types.Block) {
         blockData := &blockData{
             block: block,
             trace: trace,
-            totalDifficulty: eq.ethereum.BlockChain().GetTd(block.Hash()),
+            totalDifficulty: eq.ethereum.BlockChain().GetTdByHash(block.Hash()),
         }
 
         for _, exporter := range EXPORTERS {
